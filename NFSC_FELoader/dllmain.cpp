@@ -404,14 +404,29 @@ void Update()
 		else
 		{
 			// make disc rotation be minimal value
-			if (DiscRotationAngle > 3.14f)
+			if (DiscRotationAngle > 3.1415f)
 			{
-				DiscRotationAngle = DiscRotationAngle - floor(DiscRotationAngle / 3.1415) * 3.1415f - 3.1415f;
+				if (DiscRotationAngle > 6.283f)
+				{
+					DiscRotationAngle = DiscRotationAngle - floor(DiscRotationAngle / 6.283) * 6.283f;
+				}
+				else 
+				{ 
+					DiscRotationAngle = DiscRotationAngle - floor(DiscRotationAngle / 3.1415) * 3.1415f - 3.1415f;
+				}
 			}
-			else if (DiscRotationAngle < -3.14f)
+			else if (DiscRotationAngle < -3.1415f)
 			{
-				DiscRotationAngle = DiscRotationAngle + floor(-DiscRotationAngle / 3.1415) * 3.1415f + 3.1415f;
+				if (DiscRotationAngle < -6.283f)
+				{
+					DiscRotationAngle = DiscRotationAngle + floor(-DiscRotationAngle / 6.283) * 6.283f;
+				}
+				else 
+				{
+					DiscRotationAngle = DiscRotationAngle + floor(-DiscRotationAngle / 3.1415) * 3.1415f + 3.1415f;
+				}
 			}
+
 			// return back
 			if (DiscRotationAngle > 0.0f)
 			{
