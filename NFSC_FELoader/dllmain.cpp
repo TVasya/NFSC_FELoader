@@ -1,7 +1,7 @@
+// TODO: fix small difference in speed rotation between car and disc, and make it play disc sound using bass.dll
 #include <string>
 #include <D3dx9math.h>
 #include <vector>
-
 #include "IniReader/IniReader.h"
 #include "Injector/injector.hpp"
 
@@ -36,8 +36,7 @@ struct TrackPositionMarker
 	unsigned short Rotation;
 };
 
-const char* VERSION = "NFSC - FE Loader 3.0";
-
+const char* VERSION = "NFSC - FE Loader 3.1";
 const float DefaultCarZ = 0.275f;
 const float DefaultShadowZ = -0.25;
 
@@ -45,6 +44,14 @@ Position Positions[10];
 D3DXVECTOR4 CustomPlatformPosition;
 std::string CustomPlatformPath;
 bool DrawCustomPlatform = false;
+
+float GlobalRotationSpeedContant = 0;
+float GlobalRotationSpeedContantFast = 0;
+float DiscRotationAngle = 0.0f;
+float CarRotationSpeed = 57.457f; // DON'T EDIT THIS!!
+int CarRotationSendSpeed = 0;
+bool ReturnDisc = 0;
+int HK_Left, HK_Right;
 
 void ToggleReflections(bool enabled)
 {
@@ -90,6 +97,7 @@ TrackPositionMarker* __cdecl GetTrackPositionMarker(const char* position, int a2
 			*Game::ShadowZ = DefaultShadowZ + pos.CarZ;
 
 			DrawCustomPlatform = pos.CustomPlatform;
+
 
 			return &marker;
 		}
@@ -138,6 +146,11 @@ void __declspec(naked) CarRotationCave2()
 	{
 		cmp CustomRotation, 1;
 		jne Original2;
+
+
+		mov edi, [CarRotationSendSpeed];
+		add[edi + 0x20], edi;
+		xor edi, edi;
 		jmp cExit;
 
 	Original2:
@@ -154,6 +167,11 @@ void __declspec(naked) CarRotationCave1()
 	{
 		cmp CustomRotation, 1;
 		jne Original1;
+
+
+		mov eax, [esi + 0x48];
+		mov edi, [CarRotationSendSpeed];
+		add[eax + 0x20], edi;
 		jmp cExit;
 
 	Original1:
@@ -165,6 +183,7 @@ void __declspec(naked) CarRotationCave1()
 
 std::vector<void*> GarageParts;
 void* GarageScrollPart = NULL;
+void* GarageDiscPart = NULL;
 bool GarageInit = false;
 D3DXMATRIX m;
 
@@ -198,7 +217,9 @@ float ScrollOffset = 0;
 float ScrollLen = 0;
 float ScrollAngle = 0;
 int ScrollItems;
+int DiscItems;
 D3DXMATRIX* ScrollMatrises;
+D3DXMATRIX* RotateMatrises;
 float ScrollSpeed, TargetScrollSpeed, ScrollSpeedMin, ScrollSpeedMax;
 bool InitCustomGarage()
 {
@@ -234,6 +255,11 @@ bool InitCustomGarage()
 					Game::eModel_GetBoundingBox(GarageScrollPart, &a, &b);
 					ScrollLen = abs(a.x) + abs(b.x) - 0.02f;
 					ScrollMatrises = new D3DXMATRIX[ScrollItems * 2];
+				}
+				if (StartsWith(name, "DISC"))
+				{
+					GarageDiscPart = model;
+					RotateMatrises = new D3DXMATRIX;
 				}
 				else
 				{
@@ -284,6 +310,11 @@ void __stdcall DrawGarage(void* plat)
 				Render(plat, GarageScrollPart, ScrollMatrises[i]);
 			}
 		}
+		if (GarageDiscPart)
+		{
+			Render(plat, GarageDiscPart, *RotateMatrises);
+		}
+
 	}
 }
 
@@ -306,6 +337,20 @@ void MoveTowards(float& a, float b, float step)
 			a = b;
 		}
 	}
+}
+
+void InitDisc() {
+	// a bit messy part with moving disc part to 0 coordinates, rotating it and placing it back
+	D3DXMATRIX rotationMatrix;
+	*RotateMatrises = m;
+	RotateMatrises[0]._41 -= CustomPlatformPosition.x;
+	RotateMatrises[0]._42 -= CustomPlatformPosition.y;
+	RotateMatrises[0]._43 -= CustomPlatformPosition.z;
+	D3DXMatrixRotationZ(&rotationMatrix, DiscRotationAngle);
+	rotationMatrix._41 += CustomPlatformPosition.x;
+	rotationMatrix._42 += CustomPlatformPosition.y;
+	rotationMatrix._43 += CustomPlatformPosition.z;
+	*RotateMatrises *= rotationMatrix;
 }
 
 void Update()
@@ -333,14 +378,92 @@ void Update()
 
 		MoveTowards(ScrollSpeed, TargetScrollSpeed, *Game::DeltaTime * 5);
 	}
+
+
+	if (GarageDiscPart) {
+
+		InitDisc();
+		if (ReturnDisc == false) {
+			if (GetAsyncKeyState(HK_Left))
+			{
+				DiscRotationAngle -= *Game::DeltaTime * GlobalRotationSpeedContant;
+				CarRotationSendSpeed = -1 * CarRotationSpeed * GlobalRotationSpeedContant / 360.0f * 65535.0f * *Game::DeltaTime;
+
+			}
+			else if (GetAsyncKeyState(HK_Right))
+			{
+				DiscRotationAngle += *Game::DeltaTime * GlobalRotationSpeedContant;
+				CarRotationSendSpeed = CarRotationSpeed * GlobalRotationSpeedContant / 360.0f * 65535.0f * *Game::DeltaTime;
+			}
+			else
+			{
+				CarRotationSendSpeed = 0;
+			}
+
+		}
+		else
+		{
+			// make disc rotation be minimal value
+			if (DiscRotationAngle > 3.1415f)
+			{
+				if (DiscRotationAngle > 6.283f)
+				{
+					DiscRotationAngle = DiscRotationAngle - floor(DiscRotationAngle / 6.283) * 6.283f;
+				}
+				else 
+				{ 
+					DiscRotationAngle = DiscRotationAngle - floor(DiscRotationAngle / 3.1415) * 3.1415f - 3.1415f;
+				}
+			}
+			else if (DiscRotationAngle < -3.1415f)
+			{
+				if (DiscRotationAngle < -6.283f)
+				{
+					DiscRotationAngle = DiscRotationAngle + floor(-DiscRotationAngle / 6.283) * 6.283f;
+				}
+				else 
+				{
+					DiscRotationAngle = DiscRotationAngle + floor(-DiscRotationAngle / 3.1415) * 3.1415f + 3.1415f;
+				}
+			}
+
+			// return back
+			if (DiscRotationAngle > 0.0f)
+			{
+				DiscRotationAngle -= *Game::DeltaTime * GlobalRotationSpeedContantFast;
+				CarRotationSendSpeed = -1 * CarRotationSpeed * GlobalRotationSpeedContantFast / 360.0f * 65535.0f * *Game::DeltaTime;
+
+				if (DiscRotationAngle < 0.0f)
+				{
+					DiscRotationAngle = 0.0f;
+					CarRotationSendSpeed = 0;
+				}
+			}
+			else if (DiscRotationAngle < 0.0f)
+			{
+				DiscRotationAngle += *Game::DeltaTime * GlobalRotationSpeedContantFast;
+				CarRotationSendSpeed = CarRotationSpeed * GlobalRotationSpeedContantFast / 360.0f * 65535.0f * *Game::DeltaTime;
+				if (DiscRotationAngle > 0.0f)
+				{
+					DiscRotationAngle = 0.0f;
+					CarRotationSendSpeed = 0;
+				}
+			}
+		}
+	}
 }
 
-void _fastcall DrawGarageMain(void* a1, int, void* a2, void* a3)
+
+void __fastcall DrawGarageMain(void* a1, int, void* a2, void* a3)
 {
-	if (*Game::GameState == 3 && DrawCustomPlatform)
-	{
+	if (*Game::GameState == 3 && DrawCustomPlatform) {
+
 		Update();
 		DrawGarage(a1);
+	}
+	else
+	{
+		DiscRotationAngle = 0;
 	}
 
 	Game::RenderWorld(a1, a2, a3);
@@ -427,12 +550,14 @@ void __declspec(naked) UpdateRenderingCarParametersCave()
 void __fastcall FeCustomizeParts_Ctor(void* _this, int, void* data)
 {
 	TargetScrollSpeed = ScrollSpeedMin;
+	ReturnDisc = true;
 	Game::FeCustomizeParts_Ctor(_this, data);
 }
 
 void __fastcall FeCustomizeParts_Dtor(void* _this)
 {
 	TargetScrollSpeed = ScrollSpeedMax;
+	ReturnDisc = false;
 	Game::FeCustomizeParts_Dtor(_this);
 }
 
@@ -478,6 +603,12 @@ void Init()
 
 	injector::MakeJMP(0x0086A18F, CarRotationCave1, true);
 	injector::MakeJMP(0x0086A187, CarRotationCave2, true);
+
+	HK_Left = iniReader.ReadInteger("GENERAL", "RotateLeftKey", 0);
+	HK_Right = iniReader.ReadInteger("GENERAL", "RotateRightKey", 0);
+
+	GlobalRotationSpeedContant = iniReader.ReadFloat("GENERAL", "DiscRotatingSpeed", 0);
+	GlobalRotationSpeedContantFast = iniReader.ReadFloat("GENERAL", "DiscReturningSpeed", 0);
 
 	bool loadMapInFE = iniReader.ReadInteger("GENERAL", "LoadMapInFE", 0) == 1;
 	if (loadMapInFE)
