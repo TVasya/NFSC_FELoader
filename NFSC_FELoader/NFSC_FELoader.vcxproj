@@ -74,7 +74,7 @@
     <LinkIncremental>true</LinkIncremental>
     <TargetExt>.asi</TargetExt>
     <TargetName>NFSCFELoader</TargetName>
-    <OutDir>G:\Programms\Need for Speed Carbon1\scripts</OutDir>
+    <OutDir>G:\Programms\Need for Speed Carbon\scripts</OutDir>
     <IncludePath>$(DXSDK_DIR)Include;$(IncludePath)</IncludePath>
     <LibraryPath>$(DXSDK_DIR)Lib\x86;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
@@ -82,7 +82,7 @@
     <LinkIncremental>false</LinkIncremental>
     <TargetExt>.asi</TargetExt>
     <TargetName>NFSCFELoader</TargetName>
-    <OutDir>G:\Programms\Need for Speed Carbon1\scripts</OutDir>
+    <OutDir>G:\Programms\Need for Speed Carbon\scripts</OutDir>
     <IncludePath>$(DXSDK_DIR)Include;$(IncludePath)</IncludePath>
     <LibraryPath>$(DXSDK_DIR)Lib\x86;$(LibraryPath)</LibraryPath>
   </PropertyGroup>

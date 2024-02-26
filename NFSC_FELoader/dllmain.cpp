@@ -1,4 +1,5 @@
 // TODO: fix small difference in speed rotation between car and disc, and make it play disc sound using bass.dll
+#include <Windows.h>
 #include <string>
 #include <D3dx9math.h>
 #include <vector>
@@ -19,8 +20,11 @@ struct Position
 	float Z;
 	float CarZ;
 	int Rotation;
+	int DiscStartRotation;
 	bool Reflection;
 	bool CustomPlatform;
+	std::string DiscNameINI;
+	std::string ScrollNameINI;
 };
 
 struct TrackPositionMarker
@@ -44,6 +48,8 @@ Position Positions[10];
 D3DXVECTOR4 CustomPlatformPosition;
 std::string CustomPlatformPath;
 bool DrawCustomPlatform = false;
+std::string DiscName;
+std::string ScrollName;
 
 float GlobalRotationSpeedContant = 0;
 float GlobalRotationSpeedContantFast = 0;
@@ -51,6 +57,7 @@ float DiscRotationAngle = 0.0f;
 float CarRotationSpeed = 57.457f; // DON'T EDIT THIS!!
 int CarRotationSendSpeed = 0;
 bool ReturnDisc = 0;
+bool LockDisc = 0;
 int HK_Left, HK_Right;
 
 void ToggleReflections(bool enabled)
@@ -79,32 +86,7 @@ namespace Game
 }
 
 bool CustomRotation;
-TrackPositionMarker marker;
-TrackPositionMarker* __cdecl GetTrackPositionMarker(const char* position, int a2)
-{
-	for (auto& pos : Positions)
-	{
-		if (pos.Presset != -1 && strcmp(pos.Name, position) == 0)
-		{
-			marker.X = pos.X;
-			marker.Y = pos.Y;
-			marker.Z = pos.Z;
-			marker.Rotation = pos.Rotation;
 
-			CustomRotation = pos.Rotation >= 0;
-			ToggleReflections(pos.Reflection);
-			*Game::CarZ = DefaultCarZ - pos.CarZ;
-			*Game::ShadowZ = DefaultShadowZ + pos.CarZ;
-
-			DrawCustomPlatform = pos.CustomPlatform;
-
-
-			return &marker;
-		}
-	}
-
-	return Game::GetTrackPositionMarker(position, a2);
-}
 
 void InitGamePositions()
 {
@@ -148,9 +130,9 @@ void __declspec(naked) CarRotationCave2()
 		jne Original2;
 
 
+		mov eax, [esi + 0x48];
 		mov edi, [CarRotationSendSpeed];
-		add[edi + 0x20], edi;
-		xor edi, edi;
+		add[eax + 0x20], edi;
 		jmp cExit;
 
 	Original2:
@@ -221,10 +203,14 @@ int DiscItems;
 D3DXMATRIX* ScrollMatrises;
 D3DXMATRIX* RotateMatrises;
 float ScrollSpeed, TargetScrollSpeed, ScrollSpeedMin, ScrollSpeedMax;
+
 bool InitCustomGarage()
 {
 	if (!GarageInit)
 	{
+		GarageParts.clear();
+		GarageDiscPart = NULL;
+		GarageScrollPart = NULL;
 		int* recource = Game::FindResourceFile(CustomPlatformPath.c_str());
 		if (recource)
 		{
@@ -248,7 +234,7 @@ bool InitCustomGarage()
 
 				int* model = new int[6];
 				Game::eModel_Init(model, Game::StringHash(name));
-				if (StartsWith(name, "SCROLL_"))
+				if (StartsWith(name, ScrollName.c_str()) and ScrollName != "NONE")
 				{
 					GarageScrollPart = model;
 					D3DXVECTOR3 a, b;
@@ -256,7 +242,7 @@ bool InitCustomGarage()
 					ScrollLen = abs(a.x) + abs(b.x) - 0.02f;
 					ScrollMatrises = new D3DXMATRIX[ScrollItems * 2];
 				}
-				if (StartsWith(name, "DISC"))
+				else if (StartsWith(name, DiscName.c_str()) and DiscName != "NONE")
 				{
 					GarageDiscPart = model;
 					RotateMatrises = new D3DXMATRIX;
@@ -272,6 +258,37 @@ bool InitCustomGarage()
 	}
 
 	return GarageInit;
+}
+
+TrackPositionMarker marker;
+TrackPositionMarker* __cdecl GetTrackPositionMarker(const char* position, int a2)
+{
+	for (auto& pos : Positions)
+	{
+		if (pos.Presset != -1 && strcmp(pos.Name, position) == 0)
+		{
+			marker.X = pos.X;
+			marker.Y = pos.Y;
+			marker.Z = pos.Z;
+			marker.Rotation = pos.Rotation;
+
+			CustomRotation = pos.Rotation >= 0;
+			ToggleReflections(pos.Reflection);
+			*Game::CarZ = DefaultCarZ - pos.CarZ;
+			*Game::ShadowZ = DefaultShadowZ + pos.CarZ;
+
+			DrawCustomPlatform = pos.CustomPlatform;
+			DiscName = pos.DiscNameINI;
+			ScrollName = pos.ScrollNameINI;
+			DiscRotationAngle = pos.DiscStartRotation * 3.1415 / 180;
+			GarageInit = false;
+			InitCustomGarage();
+			return &marker;
+
+		}
+	}
+
+	return Game::GetTrackPositionMarker(position, a2);
 }
 
 void Render(void* plat, void* model, D3DXMATRIX& matrix)
@@ -343,13 +360,13 @@ void InitDisc() {
 	// a bit messy part with moving disc part to 0 coordinates, rotating it and placing it back
 	D3DXMATRIX rotationMatrix;
 	*RotateMatrises = m;
-	RotateMatrises[0]._41 -= CustomPlatformPosition.x;
-	RotateMatrises[0]._42 -= CustomPlatformPosition.y;
-	RotateMatrises[0]._43 -= CustomPlatformPosition.z;
+	RotateMatrises[0]._41 -= marker.X;
+	RotateMatrises[0]._42 -= marker.Y;
+	RotateMatrises[0]._43 -= marker.Z;
 	D3DXMatrixRotationZ(&rotationMatrix, DiscRotationAngle);
-	rotationMatrix._41 += CustomPlatformPosition.x;
-	rotationMatrix._42 += CustomPlatformPosition.y;
-	rotationMatrix._43 += CustomPlatformPosition.z;
+	rotationMatrix._41 += marker.X;
+	rotationMatrix._42 += marker.Y;
+	rotationMatrix._43 += marker.Z;
 	*RotateMatrises *= rotationMatrix;
 }
 
@@ -437,6 +454,10 @@ void Update()
 				{
 					DiscRotationAngle = 0.0f;
 					CarRotationSendSpeed = 0;
+					if (!LockDisc)
+					{
+						ReturnDisc = false;
+					}
 				}
 			}
 			else if (DiscRotationAngle < 0.0f)
@@ -447,6 +468,11 @@ void Update()
 				{
 					DiscRotationAngle = 0.0f;
 					CarRotationSendSpeed = 0;
+					if (!LockDisc) 
+					{
+						ReturnDisc = false;
+					}
+					
 				}
 			}
 		}
@@ -460,10 +486,6 @@ void __fastcall DrawGarageMain(void* a1, int, void* a2, void* a3)
 
 		Update();
 		DrawGarage(a1);
-	}
-	else
-	{
-		DiscRotationAngle = 0;
 	}
 
 	Game::RenderWorld(a1, a2, a3);
@@ -593,7 +615,10 @@ void Init()
 					rotation = rotation - floor(rotation / 360) * 360.0f;
 				}
 				pos.Rotation = rotation / 360.0f * 65535.0f;
+				pos.DiscStartRotation = rotation;
 			}
+			pos.DiscNameINI = iniReader.ReadString(PressetIni, "DiscName", std::string("DISC"));
+			pos.ScrollNameINI = iniReader.ReadString(PressetIni, "ScrollName", std::string("SCROLL_"));
 		}
 	}
 
@@ -606,6 +631,7 @@ void Init()
 
 	HK_Left = iniReader.ReadInteger("GENERAL", "RotateLeftKey", 0);
 	HK_Right = iniReader.ReadInteger("GENERAL", "RotateRightKey", 0);
+	LockDisc = iniReader.ReadInteger("GENERAL", "LockDisc", 0);
 
 	GlobalRotationSpeedContant = iniReader.ReadFloat("GENERAL", "DiscRotatingSpeed", 0);
 	GlobalRotationSpeedContantFast = iniReader.ReadFloat("GENERAL", "DiscReturningSpeed", 0);
